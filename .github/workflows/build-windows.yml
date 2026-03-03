@@ -8,41 +8,59 @@ on:
 jobs:
   build-windows-x64:
     runs-on: windows-latest
-    
+
     steps:
-    - name: Checkout
-      uses: actions/checkout@v4
-      
-    - name: Setup Node.js
-      uses: actions/setup-node@v4
-      with:
-        node-version: '22'
-        
-    - name: Setup pnpm
-      uses: pnpm/action-setup@v4
-      with:
-        version: 10.20.0
-        
-    - name: Install root dependencies
-      run: pnpm install
-      
-    - name: Install desktop dependencies
-      working-directory: apps/desktop
-      run: pnpm install
-      
-    - name: Build main process
-      working-directory: apps/desktop
-      run: pnpm run build:main
-      
-    - name: Package Windows x64
-      working-directory: apps/desktop
-      run: pnpm run package:win
-      
-    - name: Upload artifacts
-      uses: actions/upload-artifact@v4
-      with:
-        name: lobechat-windows-x64
-        path: |
-          apps/desktop/dist/*.exe
-          apps/desktop/dist/*.msi
-        retention-days: 7
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: 10.20.0
+
+      - name: Install root dependencies
+        run: pnpm install
+
+      - name: Install desktop dependencies
+        working-directory: apps/desktop
+        run: pnpm install
+
+      - name: Build main process
+        working-directory: apps/desktop
+        run: pnpm run build:main
+
+      - name: Package Windows x64
+        working-directory: apps/desktop
+        run: pnpm run package:win
+
+      # 压缩 win-*-unpacked 目录
+      - name: Compress unpacked directory
+        working-directory: apps/desktop/release
+        shell: pwsh
+        run: |
+          $unpackedDir = Get-ChildItem -Directory -Filter "win-*-unpacked" | Select-Object -First 1
+          if ($unpackedDir) {
+            Write-Host "Found unpacked directory: $($unpackedDir.Name)"
+            Compress-Archive -Path $unpackedDir.FullName -DestinationPath "$($unpackedDir.Name).zip"
+            Write-Host "Compressed to: $($unpackedDir.Name).zip"
+          } else {
+            Write-Host "No unpacked directory found"
+          }
+
+      # 上传所有构建产物
+      - name: Upload Windows artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: lobechat-windows-x64
+          path: |
+            apps/desktop/release/*.exe
+            apps/desktop/release/*.blockmap
+            apps/desktop/release/win-*-unpacked.zip
+          retention-days: 7
+          compression-level: 0
+          if-no-files-found: warn

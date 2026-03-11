@@ -22,29 +22,22 @@ const RemoteStatus = memo<SyncProps>(({ onClick }) => {
   useRemoteServerConfig();
 
   return (
-    <div
-      style={
-        {
-          paddingRight: 150,
-          WebkitAppRegion: 'no-drag',
-        } as React.CSSProperties
+    <ActionIcon
+      icon={isIniting ? Loader : isSyncActive ? Wifi : WifiOffIcon}
+      loading={isIniting}
+      size="small"
+      title={
+        isIniting
+          ? t('sync.isIniting')
+          : isSyncActive
+            ? t('sync.inCloud')
+            : t('sync.inLocalStorage')
       }
-    >
-      <ActionIcon
-        icon={isIniting ? Loader : isSyncActive ? Wifi : WifiOffIcon}
-        loading={isIniting}
-        size="small"
-        title={
-          isIniting
-            ? t('sync.isIniting')
-            : isSyncActive
-              ? t('sync.inCloud')
-              : t('sync.inLocalStorage')
-        }
-        tooltipProps={{ placement: 'bottom' }}
-        onClick={onClick}
-      />
-    </div>
+      tooltipProps={{
+        placement: 'bottomRight',
+      }}
+      onClick={onClick}
+    />
   );
 });
 

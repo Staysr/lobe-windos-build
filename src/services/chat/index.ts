@@ -142,9 +142,7 @@ class ChatService {
 
     // =================== 1.1 process user memories =================== //
 
-    const globalMemoryEnabled = settingsSelectors.memoryEnabled(getUserStoreState());
-    const agentMemoryEnabled = chatConfig.memory?.enabled ?? false;
-    const enableUserMemories = globalMemoryEnabled && agentMemoryEnabled;
+    const enableUserMemories = settingsSelectors.memoryEnabled(getUserStoreState());
     const userMemorySettings = settingsSelectors.currentMemorySettings(getUserStoreState());
     const effectiveMemoryEffort =
       chatConfig.memory?.effort ?? userMemorySettings.effort ?? 'medium';
@@ -161,11 +159,12 @@ class ChatService {
       const activeAgentId = getChatStoreState().activeAgentId || '';
       const baseContext =
         agentByIdSelectors.getAgentBuilderContextById(activeAgentId)(getAgentStoreState());
+      const activeAgentConfig =
+        agentSelectors.getAgentConfigById(activeAgentId)(getAgentStoreState());
 
       // Build official tools list (builtin tools + Klavis tools)
       const toolState = getToolStoreState();
-      const enabledPlugins =
-        agentSelectors.getAgentConfigById(activeAgentId)(getAgentStoreState()).plugins || [];
+      const enabledPlugins = activeAgentConfig?.plugins || [];
 
       const officialTools: OfficialToolItem[] = [];
 

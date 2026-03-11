@@ -2,9 +2,7 @@
 
 import { useAnalytics } from '@lobehub/analytics/react';
 import { ActionIcon, Flexbox } from '@lobehub/ui';
-import {
-  FlaskConical,
-} from 'lucide-react';
+import { FlaskConical } from 'lucide-react';
 import { memo, useCallback, useEffect, useMemo, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { Link } from 'react-router-dom';

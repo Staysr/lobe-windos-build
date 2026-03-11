@@ -126,6 +126,7 @@ const FeedbackModal = memo<FeedbackModalProps>(({ initialValues, onClose, open }
       }
       onCancel={handleCancel}
     >
+
       <Form form={form} initialValues={initialValues} layout="vertical">
         <Form.Item
           label={t('feedback.fields.title.label')}

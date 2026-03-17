@@ -44,7 +44,6 @@ interface LoginStepProps {
 
 const LoginStep = memo<LoginStepProps>(({ onBack, onNext }) => {
   const { t } = useTranslation('desktop-onboarding');
-
   const [loginStatus, setLoginStatus] = useState<LoginStatus>('idle');
   const [authProgress, setAuthProgress] = useState<AuthorizationProgress | null>(null);
   const [remoteError, setRemoteError] = useState<string | null>(null);
@@ -109,10 +108,9 @@ const LoginStep = memo<LoginStepProps>(({ onBack, onNext }) => {
     clearRemoteServerSyncError();
     setLoginStatus('loading');
     setDesktopAutoOidcFirstOpenHandled();
-
     await connectRemoteServer({
       remoteServerUrl: DEFAULT_ENDPOINT,
-      storageMode: 'selfHost'
+      storageMode: 'selfHost',
     });
   };
 
@@ -133,12 +131,12 @@ const LoginStep = memo<LoginStepProps>(({ onBack, onNext }) => {
     }
   };
 
-  // 同步登录状态
+  // Sync local UI status with real remote config
   useEffect(() => {
     if (isAuthed) setLoginStatus('success');
   }, [isAuthed]);
 
-  // 显示错误信息
+  // Surface requestAuthorization errors reported via store
   useEffect(() => {
     const message = remoteServerSyncError?.message;
     if (!message) return;
@@ -146,7 +144,7 @@ const LoginStep = memo<LoginStepProps>(({ onBack, onNext }) => {
     if (loginStatus === 'loading') setLoginStatus('error');
   }, [remoteServerSyncError?.message, loginStatus]);
 
-  // 监听授权成功
+  // Watch broadcasts from main process (polling result)
   useWatchBroadcast('authorizationSuccessful', async () => {
     setRemoteError(null);
     clearRemoteServerSyncError();
@@ -154,14 +152,12 @@ const LoginStep = memo<LoginStepProps>(({ onBack, onNext }) => {
     await refreshServerConfig();
   });
 
-  // 监听授权失败
   useWatchBroadcast('authorizationFailed', ({ error }) => {
     setRemoteError(error);
     setAuthProgress(null);
     if (loginStatus === 'loading') setLoginStatus('error');
   });
 
-  // 监听授权进度
   useWatchBroadcast('authorizationProgress', (progress) => {
     setAuthProgress(progress);
     if (progress.phase === 'cancelled') {
@@ -170,7 +166,7 @@ const LoginStep = memo<LoginStepProps>(({ onBack, onNext }) => {
     }
   });
 
-  // 同步倒计时
+  // Sync local countdown from authProgress
   useEffect(() => {
     if (authProgress) {
       const seconds = Math.max(
@@ -183,7 +179,7 @@ const LoginStep = memo<LoginStepProps>(({ onBack, onNext }) => {
     }
   }, [authProgress]);
 
-  // 倒计时
+  // Decrement local countdown every second for smooth UI updates
   useEffect(() => {
     if (localRemainingSeconds === null || localRemainingSeconds <= 0) return;
 
@@ -197,7 +193,6 @@ const LoginStep = memo<LoginStepProps>(({ onBack, onNext }) => {
     return () => clearTimeout(timer);
   }, [localRemainingSeconds]);
 
-  // 取消授权
   const handleCancelAuth = async () => {
     setRemoteError(null);
     clearRemoteServerSyncError();
@@ -321,7 +316,6 @@ const LoginStep = memo<LoginStepProps>(({ onBack, onNext }) => {
 
       <Flexbox align={'flex-start'} gap={16} style={{ width: '100%' }} width={'100%'}>
         {renderLoginContent()}
-
         <Flexbox horizontal justify={'center'} style={{ width: '100%' }}>
           {hasLegacyLocalDb && (
             <Button

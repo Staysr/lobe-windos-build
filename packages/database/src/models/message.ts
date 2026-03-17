@@ -35,7 +35,6 @@ import {
   inArray,
   isNotNull,
   isNull,
-  like,
   lte,
   not,
   or,
@@ -65,6 +64,7 @@ import {
   topics,
 } from '../schemas';
 import type { LobeChatDatabase, Transaction } from '../type';
+import { sanitizeBm25Query } from '../utils/bm25';
 import { genEndDateWhere, genRangeWhere, genStartDateWhere, genWhere } from '../utils/genWhere';
 import { idGenerator } from '../utils/idGenerator';
 
@@ -217,6 +217,7 @@ export class MessageModel {
         id: messages.id,
         role: messages.role,
         content: messages.content,
+        editorData: messages.editorData,
         reasoning: messages.reasoning,
         search: messages.search,
         metadata: messages.metadata,
@@ -555,6 +556,7 @@ export class MessageModel {
         id: messages.id,
         role: messages.role,
         content: messages.content,
+        editorData: messages.editorData,
         reasoning: messages.reasoning,
         search: messages.search,
         metadata: messages.metadata,
@@ -1055,12 +1057,17 @@ export class MessageModel {
     return result[0];
   };
 
-  queryAll = async () => {
+  queryAll = async (params?: { current?: number; pageSize?: number }) => {
+    const { current = 0, pageSize = 100 } = params ?? {};
+    const offset = current * pageSize;
+
     const result = await this.db
       .select()
       .from(messages)
-      .orderBy(messages.createdAt)
-      .where(eq(messages.userId, this.userId));
+      .where(eq(messages.userId, this.userId))
+      .orderBy(desc(messages.createdAt))
+      .limit(pageSize)
+      .offset(offset);
 
     return result as DBMessageItem[];
   };
@@ -1075,11 +1082,14 @@ export class MessageModel {
   };
 
   queryByKeyword = async (keyword: string) => {
-    if (!keyword) return [];
-    const result = await this.db.query.messages.findMany({
-      orderBy: [desc(messages.createdAt)],
-      where: and(eq(messages.userId, this.userId), like(messages.content, `%${keyword}%`)),
-    });
+    if (!keyword.trim()) return [];
+
+    const bm25Query = sanitizeBm25Query(keyword);
+    const result = await this.db
+      .select()
+      .from(messages)
+      .where(and(eq(messages.userId, this.userId), sql`${messages.content} @@@ ${bm25Query}`))
+      .orderBy(desc(messages.createdAt));
 
     return result as DBMessageItem[];
   };

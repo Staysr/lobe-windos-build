@@ -222,6 +222,10 @@ export default {
 
   'cmdk.search.assistants': 'Agents',
 
+  'cmdk.search.chatGroup': 'Agent Team',
+
+  'cmdk.search.chatGroups': 'Agent Teams',
+
   'cmdk.search.communityAgent': 'Community Agent',
 
   'cmdk.search.file': 'File',
@@ -480,6 +484,7 @@ export default {
   'tab.files': 'Files',
   'tab.home': 'Home',
   'tab.knowledgeBase': 'Library',
+  'tab.marketplace': 'Marketplace',
   'tab.me': 'Me',
   'tab.memory': 'Memory',
   'tab.pages': 'Pages',

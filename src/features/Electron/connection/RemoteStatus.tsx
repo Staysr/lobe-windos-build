@@ -26,7 +26,6 @@ const RemoteStatus = memo<SyncProps>(({ onClick }) => {
       icon={isIniting ? Loader : isSyncActive ? Wifi : WifiOffIcon}
       loading={isIniting}
       size="small"
-      style={{ marginRight: '24px' }}
       title={
         isIniting
           ? t('sync.isIniting')

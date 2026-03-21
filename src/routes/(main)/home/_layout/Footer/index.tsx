@@ -1,13 +1,20 @@
 'use client';
 
 import { useAnalytics } from '@lobehub/analytics/react';
+import { ActionIcon, Flexbox } from '@lobehub/ui';
+import {
+  Settings,
+} from 'lucide-react';
 import { memo, useCallback, useEffect, useMemo, useState } from 'react';
 import { useTranslation } from 'react-i18next';
+import { Link, useLocation } from 'react-router-dom';
 
 import ChangelogModal from '@/components/ChangelogModal';
 import HighlightNotification from '@/components/HighlightNotification';
 import { useGlobalStore } from '@/store/global';
 import { systemStatusSelectors } from '@/store/global/selectors/systemStatus';
+import { useUserStore } from '@/store/user';
+import { userGeneralSettingsSelectors } from '@/store/user/slices/settings/selectors';
 
 const PRODUCT_HUNT_NOTIFICATION = {
   actionHref: 'https://www.producthunt.com/products/lobehub?launch=lobehub',
@@ -20,6 +27,9 @@ const PRODUCT_HUNT_NOTIFICATION = {
 const Footer = memo(() => {
   const { t } = useTranslation('common');
   const { analytics } = useAnalytics();
+  const isDevMode = useUserStore((s) => userGeneralSettingsSelectors.config(s).isDevMode);
+  const location = useLocation();
+  const isSettingsPage = location.pathname.startsWith('/settings');
   const [shouldLoadChangelog] = useState(false);
   const [isChangelogModalOpen, setIsChangelogModalOpen] = useState(false);
   const [isProductHuntCardOpen, setIsProductHuntCardOpen] = useState(false);
@@ -80,6 +90,13 @@ const Footer = memo(() => {
 
   return (
     <>
+      <Flexbox horizontal align={'center'} gap={2} padding={8}>
+        {isDevMode && !isSettingsPage && (
+          <Link to="/settings">
+            <ActionIcon aria-label={t('userPanel.setting')} icon={Settings} size={16} />
+          </Link>
+        )}
+      </Flexbox>
       <ChangelogModal
         open={isChangelogModalOpen}
         shouldLoad={shouldLoadChangelog}

@@ -3,12 +3,20 @@ import debug from 'debug';
 import { AgentBotProviderModel } from '@/database/models/agentBotProvider';
 import { TopicModel } from '@/database/models/topic';
 import { type LobeChatDatabase } from '@/database/type';
+import { getAgentRuntimeRedisClient } from '@/server/modules/AgentRuntime/redis';
 import { KeyVaultsGateKeeper } from '@/server/modules/KeyVaultsEncrypt';
 import { SystemAgentService } from '@/server/services/systemAgent';
 
+import { AgentBridgeService } from './AgentBridgeService';
 import type { BotProviderConfig, PlatformClient, PlatformMessenger, UsageStats } from './platforms';
 import { platformRegistry } from './platforms';
-import { renderError, renderFinalReply, renderStepProgress, splitMessage } from './replyTemplate';
+import {
+  renderError,
+  renderFinalReply,
+  renderStepProgress,
+  renderStopped,
+  splitMessage,
+} from './replyTemplate';
 
 const log = debug('lobe-server:bot:callback');
 
@@ -27,7 +35,7 @@ export interface BotCallbackBody {
   lastToolsCalling?: any;
   llmCalls?: number;
   platformThreadId: string;
-  progressMessageId: string;
+  progressMessageId?: string;
   reason?: string;
   reasoning?: string;
   shouldContinue?: boolean;
@@ -72,13 +80,26 @@ export class BotCallbackService {
     const canEdit = entry?.supportsMessageEdit !== false;
 
     if (type === 'step') {
-      // Skip step progress updates for platforms that can't edit messages
-      if (canEdit) {
+      if (canEdit && progressMessageId) {
         await this.handleStep(body, messenger, progressMessageId, client);
+      } else if (body.shouldContinue) {
+        // For platforms without progress messages (e.g. WeChat), still send typing indicator
+        await messenger.triggerTyping();
       }
     } else if (type === 'completion') {
-      await this.handleCompletion(body, messenger, progressMessageId, client, charLimit, canEdit);
-      await this.removeEyesReaction(body, messenger);
+      await this.handleCompletion(
+        body,
+        messenger,
+        progressMessageId ?? '',
+        client,
+        charLimit,
+        canEdit,
+      );
+      await this.removeEyesReaction(body, client, platformThreadId);
+      // Clear the active thread tracker so the thread can accept new messages.
+      // In queue mode, the bridge handler's finally block skips this cleanup
+      // to keep the thread marked active while the agent runs on the job queue.
+      AgentBridgeService.clearActiveThread(platformThreadId);
       this.summarizeTopicTitle(body, messenger);
     }
   }
@@ -121,7 +142,9 @@ export class BotCallbackService {
       settings: settings || {},
     };
 
-    const client = entry.clientFactory.createClient(config, {});
+    const client = entry.clientFactory.createClient(config, {
+      redisClient: getAgentRuntimeRedisClient() as any,
+    });
     const messenger = client.getMessenger(platformThreadId);
 
     return { charLimit, messenger, client };
@@ -199,6 +222,16 @@ export class BotCallbackService {
       return;
     }
 
+    if (reason === 'interrupted') {
+      const stoppedText = renderStopped(errorMessage || 'Execution stopped.');
+      try {
+        await messenger.createMessage(stoppedText);
+      } catch (error) {
+        log('handleCompletion: failed to send interrupted message: %O', error);
+      }
+      return;
+    }
+
     if (!lastAssistantContent) {
       log('handleCompletion: no lastAssistantContent, skipping');
       return;
@@ -236,10 +269,17 @@ export class BotCallbackService {
 
   private async removeEyesReaction(
     body: BotCallbackBody,
-    messenger: PlatformMessenger,
+    client: PlatformClient,
+    platformThreadId: string,
   ): Promise<void> {
     const { userMessageId } = body;
     if (!userMessageId) return;
+
+    // Thread-starter messages may live in the parent channel (e.g. Discord),
+    // so resolve the correct thread ID before obtaining the messenger.
+    const reactionThreadId =
+      client.resolveReactionThreadId?.(platformThreadId, userMessageId) ?? platformThreadId;
+    const messenger = client.getMessenger(reactionThreadId);
 
     try {
       await messenger.removeReaction(userMessageId, '👀');
@@ -250,7 +290,16 @@ export class BotCallbackService {
 
   private summarizeTopicTitle(body: BotCallbackBody, messenger: PlatformMessenger): void {
     const { reason, topicId, userId, userPrompt, lastAssistantContent } = body;
-    if (reason === 'error' || !topicId || !userId || !userPrompt || !lastAssistantContent) return;
+    if (
+      reason === 'error' ||
+      reason === 'interrupted' ||
+      !topicId ||
+      !userId ||
+      !userPrompt ||
+      !lastAssistantContent
+    ) {
+      return;
+    }
 
     const topicModel = new TopicModel(this.db, userId);
     topicModel

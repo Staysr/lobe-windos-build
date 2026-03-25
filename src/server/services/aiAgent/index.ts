@@ -7,7 +7,7 @@ import {
   generateSystemPrompt,
   RemoteDeviceManifest,
 } from '@lobechat/builtin-tool-remote-device';
-import { builtinTools } from '@lobechat/builtin-tools';
+import { builtinTools, manualModeExcludeToolIds } from '@lobechat/builtin-tools';
 import { LOADING_FLAT } from '@lobechat/const';
 import type { LobeToolManifest } from '@lobechat/context-engine';
 import type { LobeChatDatabase } from '@lobechat/database';
@@ -43,6 +43,7 @@ import { type ServerUserMemoryConfig } from '@/server/modules/Mecha/ContextEngin
 import { AgentService } from '@/server/services/agent';
 import type { AgentRuntimeServiceOptions } from '@/server/services/agentRuntime';
 import { AgentRuntimeService } from '@/server/services/agentRuntime';
+import { getAbortError, isAbortError, throwIfAborted } from '@/server/services/agentRuntime/abort';
 import { type AgentHook } from '@/server/services/agentRuntime/hooks/types';
 import { type StepLifecycleCallbacks } from '@/server/services/agentRuntime/types';
 import { FileService } from '@/server/services/file';
@@ -108,6 +109,8 @@ interface InternalExecAgentParams extends ExecAgentParams {
   hooks?: AgentHook[];
   /** Maximum steps for the agent operation */
   maxSteps?: number;
+  /** Abort startup before the agent runtime operation is created */
+  signal?: AbortSignal;
   /** Step lifecycle callbacks for operation tracking (server-side only) */
   stepCallbacks?: StepLifecycleCallbacks;
   /**
@@ -216,6 +219,7 @@ export class AiAgentService {
       cronJobId,
       evalContext,
       maxSteps,
+      signal,
       userInterventionConfig,
       completionWebhook,
       stepWebhook,
@@ -231,6 +235,39 @@ export class AiAgentService {
     const identifier = agentId || slug!;
 
     log('execAgent: identifier=%s, prompt=%s', identifier, prompt.slice(0, 50));
+
+    const assistantMessageRef: { current?: string } = {};
+    const updateAbortedAssistantMessage = async (errorMessage: string) => {
+      if (!assistantMessageRef.current) return;
+
+      try {
+        await this.messageModel.update(assistantMessageRef.current, {
+          content: '',
+          error: {
+            body: {
+              detail: errorMessage,
+            },
+            message: errorMessage,
+            type: 'ServerAgentRuntimeError',
+          },
+        });
+      } catch (error) {
+        log(
+          'execAgent: failed to update aborted assistant message %s: %O',
+          assistantMessageRef.current,
+          error,
+        );
+      }
+    };
+    const throwIfExecutionAborted = async (stage: string) => {
+      if (!signal?.aborted) return;
+
+      const error = getAbortError(signal, `Agent execution aborted during ${stage}`);
+      await updateAbortedAssistantMessage(error.message);
+      throw error;
+    };
+
+    throwIfAborted(signal, 'Agent execution aborted before startup');
 
     // 1. Get agent configuration with default config merged (supports both id and slug)
     const agentConfig = await this.agentService.getAgentConfig(identifier);
@@ -272,6 +309,8 @@ export class AiAgentService {
       }
     }
 
+    await throwIfExecutionAborted('agent configuration');
+
     // 2.5. Append additional instructions to agent's systemRole
     if (instructions) {
       agentConfig.systemRole = agentConfig.systemRole
@@ -306,6 +345,8 @@ export class AiAgentService {
     } else {
       log('execAgent: reusing existing topic %s', topicId);
     }
+
+    await throwIfExecutionAborted('topic setup');
 
     // Extract model and provider from agent config
     const model = agentConfig.model!;
@@ -362,6 +403,8 @@ export class AiAgentService {
       globalMemoryEnabled,
       userTimezone ?? 'default',
     );
+
+    await throwIfExecutionAborted('tool discovery');
 
     // 9. Create tools using Server AgentToolsEngine
     const hasEnabledKnowledgeBases =
@@ -434,13 +477,14 @@ export class AiAgentService {
     ];
     log('execAgent: agent configured plugins: %O', pluginIds);
 
-    // When skillActivateMode is 'manual', skip default tools to give user precise control
+    // When skillActivateMode is 'manual', exclude only discovery tools (lobe-activator, lobe-skill-store)
+    // so that externally enabled tools (sandbox, web browsing, etc.) remain available
     const isManualMode = agentConfig.chatConfig?.skillActivateMode === 'manual';
 
     const toolsResult = toolsEngine.generateToolsDetailed({
+      excludeDefaultToolIds: isManualMode ? manualModeExcludeToolIds : undefined,
       model,
       provider,
-      skipDefaultTools: isManualMode,
       toolIds: pluginIds,
     });
 
@@ -604,6 +648,8 @@ export class AiAgentService {
       );
     }
 
+    await throwIfExecutionAborted('tool preparation');
+
     // 10. Fetch user persona for memory injection (reuses globalMemoryEnabled from step 8)
     let userMemory: ServerUserMemoryConfig | undefined;
 
@@ -649,6 +695,8 @@ export class AiAgentService {
       });
     }
 
+    await throwIfExecutionAborted('message history loading');
+
     // 12. Upload external files to S3 and collect file IDs
     let fileIds: string[] | undefined;
     let imageList: Array<{ alt: string; id: string; url: string }> | undefined;
@@ -659,6 +707,8 @@ export class AiAgentService {
       imageList = [];
 
       for (const file of files) {
+        await throwIfExecutionAborted('file upload');
+
         const ext = file.name?.split('.').pop() || 'bin';
         const pathname = `files/${this.userId}/${nanoid()}/${file.name || `file.${ext}`}`;
 
@@ -681,6 +731,8 @@ export class AiAgentService {
       }
       if (imageList.length === 0) imageList = undefined;
     }
+
+    await throwIfExecutionAborted('message creation');
 
     // 13. Create user message in database
     // Include threadId if provided (for SubAgent task execution in isolated Thread)
@@ -707,6 +759,7 @@ export class AiAgentService {
       topicId,
     });
     log('execAgent: created assistant message %s', assistantMessageRecord.id);
+    assistantMessageRef.current = assistantMessageRecord.id;
 
     // Create user message object for processing (include imageList for vision models)
     const userMessage = { content: prompt, imageList, role: 'user' as const };
@@ -715,6 +768,8 @@ export class AiAgentService {
     const allMessages = [...historyMessages, userMessage];
 
     log('execAgent: prepared evalContext for executor');
+
+    await throwIfExecutionAborted('operation preparation');
 
     // 15. Generate operation ID: agt_{timestamp}_{agentId}_{topicId}_{random}
     const timestamp = Date.now();
@@ -799,6 +854,7 @@ export class AiAgentService {
         modelRuntimeConfig: { model, provider },
         hooks,
         operationId,
+        signal,
         stepCallbacks,
         stepWebhook,
         stream,
@@ -832,6 +888,12 @@ export class AiAgentService {
         userMessageId: userMessageRecord.id,
       };
     } catch (error) {
+      if (isAbortError(error)) {
+        await updateAbortedAssistantMessage(error.message);
+        log('execAgent: createOperation aborted for %s: %s', operationId, error.message);
+        throw error;
+      }
+
       // Operation startup failed (e.g., QStash queue service unavailable)
       // Update assistant message with error so user can see what went wrong
       const errorMessage = error instanceof Error ? error.message : 'Unknown error starting agent';
@@ -1325,22 +1387,23 @@ export class AiAgentService {
       throw new Error('Operation ID not found');
     }
 
-    // 2. Try to interrupt the operation
-    // Note: AgentRuntimeService may not have interruptOperation method yet
-    // We'll gracefully handle this case by only updating thread status
-    try {
-      // Check if the method exists before calling (using type assertion for future method)
-      const service = this.agentRuntimeService as any;
-      if (typeof service.interruptOperation === 'function') {
-        await service.interruptOperation({
-          operationId: resolvedOperationId,
-        });
-      } else {
-        log('interruptTask: interruptOperation method not available, only updating thread status');
-      }
-    } catch (error: any) {
-      log('interruptTask: Failed to interrupt operation: %O', error);
-      // Continue to update Thread status even if operation interrupt fails
+    // 2. Interrupt the runtime operation first. Only mark the thread cancelled
+    // after the runtime acknowledges the interrupt to avoid unlocking a live task.
+    const interrupted = await this.agentRuntimeService.interruptOperation(resolvedOperationId);
+    log(
+      'interruptTask: interruptOperation=%s for operationId=%s',
+      interrupted,
+      resolvedOperationId,
+    );
+
+    if (!interrupted) {
+      const alreadyCancelled = thread?.status === ThreadStatus.Cancel;
+
+      return {
+        operationId: resolvedOperationId,
+        success: alreadyCancelled,
+        threadId: thread?.id,
+      };
     }
 
     // 3. Update Thread status to cancel

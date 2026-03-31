@@ -1,0 +1,1 @@
+var r=(e=>(e.ContextWindowTokens="contextWindowTokens",e.Identifier="identifier",e.InputPrice="inputPrice",e.OutputPrice="outputPrice",e.ProviderCount="providerCount",e.ReleasedAt="releasedAt",e))(r||{}),t=(e=>(e.Overview="overview",e.Parameter="parameter",e.Related="related",e))(t||{});export{r as M,t as a};

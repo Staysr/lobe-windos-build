@@ -1,0 +1,1 @@
+import{j as s}from"../vendor/vendor-motion-BIhyHZ0p.js";import{r as e}from"../vendor/vendor-emotion-DdM-9MtU.js";const n=e.createContext(null),x=()=>{const t=e.use(n);if(!t)throw new Error("useSettingsContext must be used within a descendant of SettingsContextProvider");return t},u=({children:t,value:o})=>s.jsx(n,{value:o,children:t});export{u as S,x as u};

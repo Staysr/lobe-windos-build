@@ -1,0 +1,1 @@
+class i{listeners=new Map;on(e,t){return this.listeners.has(e)||this.listeners.set(e,new Set),this.listeners.get(e).add(t),()=>{this.listeners.get(e)?.delete(t)}}emit(e,t){this.listeners.get(e)?.forEach(s=>{try{s(t)}catch(r){console.error("[MarketAuthEvents] Error in event callback:",r)}})}}const h=new i;export{h as marketAuthEvents};

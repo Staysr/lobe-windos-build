@@ -1,0 +1,1 @@
+var n=(l=>(l.Assistants="agent",l.GroupAgents="group_agent",l.Home="home",l.Mcp="mcp",l.Models="model",l.Plugins="plugin",l.Providers="provider",l.Skills="skill",l.User="user",l))(n||{});export{n as D};

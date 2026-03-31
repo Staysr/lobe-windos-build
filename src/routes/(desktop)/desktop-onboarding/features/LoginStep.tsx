@@ -27,7 +27,7 @@ const LEGACY_LOCAL_DB_MIGRATION_GUIDE_URL = urlJoin(
 // 默认服务器地址
 const DEFAULT_ENDPOINT = 'https://lobe.xxchat.xyz';
 
-// 登录状态类型
+// Login status type
 type LoginStatus = 'idle' | 'loading' | 'success' | 'error';
 
 const authorizationPhaseI18nKeyMap: Record<AuthorizationPhase, string> = {
@@ -91,12 +91,12 @@ const LoginStep = memo<LoginStepProps>(({ onBack, onNext }) => {
 
   const isAuthed = !!dataSyncConfig?.active && dataSyncConfig.storageMode === 'selfHost';
 
-  // 判断是否可以开始使用
+  // Determine if user can proceed
   const canStart = () => {
     return isAuthed || loginStatus === 'success';
   };
 
-  // 处理登录
+  // Handle login
   const handleLogin = async () => {
     if (!isDesktop) {
       setRemoteError(t('screen5.errors.desktopOnlyOidc'));
@@ -114,7 +114,7 @@ const LoginStep = memo<LoginStepProps>(({ onBack, onNext }) => {
     });
   };
 
-  // 退出登录
+  // Sign out (disconnect remote sync authorization) and return to login selection
   const handleSignOut = async () => {
     if (isSigningOut) return;
 
@@ -201,9 +201,8 @@ const LoginStep = memo<LoginStepProps>(({ onBack, onNext }) => {
     await remoteServerService.cancelAuthorization();
   };
 
-  // 渲染登录内容
+  // Render login content
   const renderLoginContent = () => {
-    // 成功状态
     if (loginStatus === 'success') {
       return (
         <Flexbox gap={16} style={{ width: '100%' }}>
@@ -233,7 +232,6 @@ const LoginStep = memo<LoginStepProps>(({ onBack, onNext }) => {
       );
     }
 
-    // 错误状态
     if (loginStatus === 'error') {
       const errorMessage = remoteError?.toLowerCase().includes('timed out')
         ? t('screen5.errors.timedOut')
@@ -259,7 +257,6 @@ const LoginStep = memo<LoginStepProps>(({ onBack, onNext }) => {
       );
     }
 
-    // 加载状态
     if (loginStatus === 'loading') {
       const phaseText = t(authorizationPhaseI18nKeyMap[authProgress?.phase ?? 'browser_opened'], {
         defaultValue: t('screen5.actions.signingIn'),
@@ -291,7 +288,6 @@ const LoginStep = memo<LoginStepProps>(({ onBack, onNext }) => {
       );
     }
 
-    // 初始状态 - 显示登录按钮
     return (
       <Button
         block

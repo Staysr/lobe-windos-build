@@ -1,0 +1,1 @@
+import{r as o}from"../vendor/vendor-emotion-D2wYcXAj.js";const u=r=>{const t=o.useRef(!1),n=o.useRef(r);n.current=r;const e=o.useCallback(s=>{t.current=!1,n.current?.onCompositionEnd?.(s)},[]),i=o.useCallback(s=>{t.current=!0,n.current?.onCompositionStart?.(s)},[]);return{compositionProps:{onCompositionEnd:e,onCompositionStart:i},isComposingRef:t}};export{u};

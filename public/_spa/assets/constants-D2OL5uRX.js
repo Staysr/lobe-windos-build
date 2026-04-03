@@ -1,0 +1,1 @@
+const t={root:{id:"root",type:"root",format:"",indent:0,version:1,children:[{id:"42",type:"paragraph",format:"",indent:0,version:1,children:[],direction:null,textStyle:"",textFormat:0}],direction:null}};export{t as E};

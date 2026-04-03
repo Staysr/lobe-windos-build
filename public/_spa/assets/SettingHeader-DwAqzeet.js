@@ -1,0 +1,1 @@
+import{j as e}from"../vendor/vendor-motion-DRC1LdIk.js";import{F as t,a8 as i,bU as a}from"./index-BmW5CTHd.js";const l=({title:s,extra:r})=>e.jsxs(t,{gap:24,style:{paddingTop:12},children:[e.jsxs(t,{horizontal:!0,align:"center",justify:"space-between",children:[e.jsx(i,{strong:!0,fontSize:24,children:s}),r]}),e.jsx(a,{style:{margin:0}})]});export{l as S};

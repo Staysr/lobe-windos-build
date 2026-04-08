@@ -17,6 +17,7 @@ import {
   buildStepSkillDelta,
   buildStepToolDelta,
   type LobeToolManifest,
+  type OnboardingContext,
   type OperationToolSet,
   type ResolvedToolSet,
   resolveTopicReferences,
@@ -39,6 +40,7 @@ import { type EvalContext } from '@/server/modules/Mecha/ContextEngineering/type
 import { initModelRuntimeFromDB } from '@/server/modules/ModelRuntime';
 import { AgentDocumentsService } from '@/server/services/agentDocuments';
 import { MessageService } from '@/server/services/message';
+import { OnboardingService } from '@/server/services/onboarding';
 import {
   type ToolExecutionResultResponse,
   type ToolExecutionService,
@@ -146,10 +148,7 @@ const executeToolWithRetry = async (
   throw new Error('Tool execution retry loop exited unexpectedly');
 };
 
-const buildToolDiscoveryConfig = (
-  operationToolSet: OperationToolSet,
-  enabledToolIds: string[],
-) => {
+const buildToolDiscoveryConfig = (operationToolSet: OperationToolSet, enabledToolIds: string[]) => {
   const enabledToolSet = new Set(enabledToolIds);
 
   if (!enabledToolSet.has(LobeActivatorIdentifier)) return undefined;
@@ -164,7 +163,7 @@ const buildToolDiscoveryConfig = (
 
   if (availableTools.length === 0) return undefined;
 
-  return { availableTools }
+  return { availableTools };
 };
 
 const formatErrorEventData = (error: unknown, phase: string) => {
@@ -385,6 +384,7 @@ export const createRuntimeExecutors = (
             if (docs.length > 0) {
               agentDocuments = docs.map((doc) => ({
                 content: doc.content,
+                description: doc.description ?? undefined,
                 filename: doc.filename,
                 id: doc.id,
                 loadPosition: normalizeDocumentPosition(
@@ -392,6 +392,7 @@ export const createRuntimeExecutors = (
                 ),
                 loadRules: doc.loadRules,
                 policyId: doc.templateId,
+                policyLoad: doc.policyLoad as 'always' | 'progressive',
                 policyLoadFormat: doc.policy?.context?.policyLoadFormat || doc.policyLoadFormat,
                 title: doc.title,
               }));
@@ -399,6 +400,62 @@ export const createRuntimeExecutors = (
             }
           } catch (error) {
             log('Failed to resolve agent documents for agent %s: %O', agentId, error);
+          }
+        }
+
+        // Detect onboarding agent and build context injection
+        let onboardingContext: OnboardingContext | undefined;
+        const isOnboardingAgent =
+          agentConfig?.slug === 'web-onboarding' ||
+          resolved.enabledToolIds.includes('lobe-web-onboarding');
+        const alreadyHasOnboardingContext = (
+          llmPayload.messages as Array<{ content: string | unknown }>
+        ).some((message) => {
+          if (typeof message.content !== 'string') return false;
+
+          return (
+            message.content.includes('<onboarding_context>') ||
+            message.content.includes('<current_soul_document>') ||
+            message.content.includes('<current_user_persona>')
+          );
+        });
+
+        if (isOnboardingAgent && !alreadyHasOnboardingContext && ctx.serverDB && ctx.userId) {
+          try {
+            const { formatWebOnboardingStateMessage } =
+              await import('@lobechat/builtin-tool-web-onboarding/utils');
+            const onboardingService = new OnboardingService(ctx.serverDB, ctx.userId);
+            const onboardingState = await onboardingService.getState();
+            const phaseGuidance = formatWebOnboardingStateMessage(onboardingState);
+
+            // Fetch SOUL.md from inbox agent's documents
+            let soulContent: string | null = null;
+            try {
+              const inboxAgentId = await onboardingService.getInboxAgentId();
+              if (inboxAgentId) {
+                const docService = new AgentDocumentsService(ctx.serverDB, ctx.userId);
+                const soulDoc = await docService.getDocumentByFilename(inboxAgentId, 'SOUL.md');
+                soulContent = soulDoc?.content ?? null;
+              }
+            } catch (error) {
+              log('Failed to fetch SOUL.md for onboarding context: %O', error);
+            }
+
+            // Fetch user persona
+            let personaContent: string | null = null;
+            try {
+              const { UserPersonaModel } = await import('@/database/models/userMemory/persona');
+              const personaModel = new UserPersonaModel(ctx.serverDB, ctx.userId);
+              const persona = await personaModel.getLatestPersonaDocument();
+              personaContent = persona?.persona ?? null;
+            } catch (error) {
+              log('Failed to fetch user persona for onboarding context: %O', error);
+            }
+
+            onboardingContext = { personaContent, phaseGuidance, soulContent };
+            log('Built onboarding context for agent %s, phase: %s', agentId, onboardingState.phase);
+          } catch (error) {
+            log('Failed to build onboarding context: %O', error);
           }
         }
 
@@ -465,6 +522,7 @@ export const createRuntimeExecutors = (
 
           // Topic reference summaries
           ...(topicReferences && { topicReferences }),
+          ...(onboardingContext && { onboardingContext }),
         };
 
         processedMessages = await serverMessagesEngine(contextEngineInput);

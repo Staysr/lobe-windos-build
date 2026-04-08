@@ -1,0 +1,1 @@
+import{$ as c,U as r,aF as u,aG as d}from"./index-BBAuCJqA.js";const f=n=>{const[a,o]=c(e=>[e.useFetchAgentConfig,e.activeAgentId]),t=r(u.isLogin),i=d(),g=n||o||i.aid||"",s=a(t,g);return{...s,isLoading:s.isLoading&&t}};export{f as u};

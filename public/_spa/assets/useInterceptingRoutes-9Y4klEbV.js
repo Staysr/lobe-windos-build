@@ -1,1 +1,0 @@
-import{r}from"../vendor/vendor-emotion-D2wYcXAj.js";import{_ as c,$ as a,a0 as u,f as g,g as p}from"./index-BmW5CTHd.js";const M=(o=c.Meta)=>{const t=a(i=>i.activeAgentId),e=u(),s=g(),n=p();return r.useMemo(()=>e?()=>s(`/chat/settings?session=${t}&showMobileWorkspace=true`):()=>{a.setState({showAgentSetting:!0})},[t,s,n.pathname,o,e])};export{M as u};

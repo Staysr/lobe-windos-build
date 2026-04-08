@@ -1,0 +1,1 @@
+import{j as o}from"../vendor/vendor-motion-DRC1LdIk.js";import{a9 as a,I as i,o as e}from"./index-BBAuCJqA.js";import{r as m}from"../vendor/vendor-emotion-D2wYcXAj.js";import{Z as c}from"../vendor/vendor-icons-C6hg4LnF.js";const f=m.memo(({size:r,iconStyle:s,...t})=>o.jsx(a,{...t,children:o.jsx(i,{icon:c,size:r,style:{color:e.colorTextTertiary,...s}})}));export{f as I};

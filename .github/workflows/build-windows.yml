@@ -28,6 +28,14 @@ jobs:
         working-directory: apps/desktop
         run: pnpm install
 
+      - name: Install CLI dependencies
+        working-directory: apps/cli
+        run: pnpm install
+
+      - name: Install tsdown for CLI
+        working-directory: apps/cli
+        run: pnpm add -D tsdown
+
       - name: Build main process
         working-directory: apps/desktop
         run: pnpm run build:main

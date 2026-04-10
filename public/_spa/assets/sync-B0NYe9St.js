@@ -1,0 +1,1 @@
+import{a5 as o}from"./index-C275yc7e.js";import"./providerConfig-BNV0IvMA.js";const r=e=>e.dataSyncConfig.active,t=e=>e.dataSyncConfig.storageMode,a=e=>e.dataSyncConfig.storageMode==="cloud"?o:e.dataSyncConfig.remoteServerUrl||"",n=e=>e.dataSyncConfig.remoteServerUrl||"",s={isSyncActive:r,rawRemoteServerUrl:n,remoteServerUrl:a,storageMode:t};export{s as e};

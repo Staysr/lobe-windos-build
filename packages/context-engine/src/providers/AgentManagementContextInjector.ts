@@ -2,7 +2,7 @@ import { escapeXml } from '@lobechat/prompts';
 import type { RuntimeMentionedAgent } from '@lobechat/types';
 import debug from 'debug';
 
-import { BaseProvider } from '../base/BaseProvider';
+import { BaseFirstUserContentProvider } from '../base/BaseFirstUserContentProvider';
 import type { PipelineContext, ProcessorOptions } from '../types';
 
 declare module '../types' {
@@ -74,7 +74,13 @@ export interface AvailablePluginInfo {
  * Agent Management context
  */
 export interface AgentManagementContext {
-  /** User's recently updated agents — surfaced so the model can callAgent without searchAgent first */
+  /**
+   * User's recently updated agents — surfaced so the model can callAgent without
+   * searchAgent first. The current/responding agent is NEVER included here, so
+   * the model has no exposure to its own id from this section and cannot
+   * accidentally delegate to itself. Filtering happens at the caller side
+   * (server `aiAgent` and client `contextEngineering`).
+   */
   availableAgents?: AvailableAgentInfo[];
   /** Whether the user has more agents than the ones listed in `availableAgents` */
   availableAgentsHasMore?: boolean;
@@ -125,7 +131,8 @@ const defaultFormatContext = (context: AgentManagementContext): string => {
     parts.push(`<available_models>\n${providersXml}\n</available_models>`);
   }
 
-  // Add available agents section (user's existing agents)
+  // Add available agents section (user's existing agents — never includes the current agent;
+  // the caller filters self out so the model has no exposure to its own id from this section)
   if (context.availableAgents && context.availableAgents.length > 0) {
     const agentsXml = context.availableAgents
       .map((agent) => {
@@ -203,7 +210,7 @@ const defaultFormatContext = (context: AgentManagementContext): string => {
   }
   if (hasAgents) {
     instructionParts.push(
-      "The `available_agents` section lists the user's existing agents. When the user's request clearly matches one of them, you may delegate to it via the Agent Management `callAgent` tool (activating the tool first if it is not already enabled). If no listed agent matches, use `searchAgent` to look further (including the marketplace).",
+      "The `available_agents` section lists the user's other existing agents (you are not in this list). When the user's request clearly matches one of them, you may delegate to it via the Agent Management `callAgent` tool (activating the tool first if it is not already enabled). If no listed agent matches, use `searchAgent` to look further (including the marketplace).",
     );
   }
 
@@ -230,9 +237,22 @@ ${agentsXml}
 
 /**
  * Agent Management Context Injector
- * Responsible for injecting available models and plugins when Agent Management tool is enabled
+ *
+ * Has two injection points:
+ *
+ * 1. **Before first user message** — providers/plugins/availableAgents XML.
+ *    Goes through `BaseFirstUserContentProvider` so it merges with other
+ *    `systemInjection: true` providers (UserMemory, Knowledge, AgentBuilder,
+ *    ...) into a single consolidated message, preserving Phase 3 ordering
+ *    and prefix-cache friendliness.
+ *
+ * 2. **After last user message** — `<mentioned_agents>` delegation hint.
+ *    Always its own standalone message because position matters for model
+ *    salience (delegation instructions need to be the last thing the model
+ *    sees before responding). Handled by overriding `doProcess` to splice
+ *    after `super.doProcess()` returns.
  */
-export class AgentManagementContextInjector extends BaseProvider {
+export class AgentManagementContextInjector extends BaseFirstUserContentProvider {
   readonly name = 'AgentManagementContextInjector';
 
   constructor(
@@ -242,87 +262,100 @@ export class AgentManagementContextInjector extends BaseProvider {
     super(options);
   }
 
-  protected async doProcess(context: PipelineContext): Promise<PipelineContext> {
-    const clonedContext = this.cloneContext(context);
-
-    // Skip if Agent Management is not enabled
+  /**
+   * Build the providers/plugins/availableAgents context block for the
+   * before-first-user merged injection. Excludes `mentionedAgents` — those
+   * have a different injection position and are handled in `doProcess`.
+   */
+  protected buildContent(_context: PipelineContext): string | null {
     if (!this.config.enabled) {
-      log('Agent Management not enabled, skipping injection');
-      return this.markAsExecuted(clonedContext);
+      log('Agent Management not enabled, skipping before-first-user injection');
+      return null;
     }
 
-    // Skip if no context data
     if (!this.config.context) {
-      log('No Agent Management context provided, skipping injection');
-      return this.markAsExecuted(clonedContext);
+      log('No Agent Management context provided, skipping before-first-user injection');
+      return null;
+    }
+
+    // Use a destructure-rest copy so future fields (e.g. currentAgent) don't
+    // silently get dropped here.
+    const { mentionedAgents: _mentioned, ...contextWithoutMentions } = this.config.context;
+
+    const formatFn = this.config.formatContext || defaultFormatContext;
+    const formattedContent = formatFn(contextWithoutMentions);
+
+    if (!formattedContent) {
+      log('No agent-management content to inject after formatting');
+      return null;
+    }
+
+    log('Agent Management context prepared for before-first-user merge');
+    return formattedContent;
+  }
+
+  protected async doProcess(context: PipelineContext): Promise<PipelineContext> {
+    // 1) Let BaseFirstUserContentProvider handle the before-first-user merge
+    let result = await super.doProcess(context);
+
+    // Track metadata when we actually injected content
+    if (this.config.enabled && this.config.context) {
+      const { mentionedAgents: _m, ...rest } = this.config.context;
+      const formatFn = this.config.formatContext || defaultFormatContext;
+      if (formatFn(rest)) {
+        result.metadata.agentManagementContextInjected = true;
+      }
+    }
+
+    // 2) Handle mentionedAgents — separate standalone message after last user
+    if (!this.config.enabled || !this.config.context) {
+      return result;
     }
 
     const hasMentionedAgents =
       this.config.context.mentionedAgents && this.config.context.mentionedAgents.length > 0;
 
-    // Format context (excluding mentionedAgents — those are injected separately after the last user message)
-    const contextWithoutMentions: AgentManagementContext = hasMentionedAgents
-      ? {
-          availableAgents: this.config.context.availableAgents,
-          availableAgentsHasMore: this.config.context.availableAgentsHasMore,
-          availablePlugins: this.config.context.availablePlugins,
-          availableProviders: this.config.context.availableProviders,
-        }
-      : this.config.context;
+    if (!hasMentionedAgents) {
+      return result;
+    }
 
-    const formatFn = this.config.formatContext || defaultFormatContext;
-    const formattedContent = formatFn(contextWithoutMentions);
+    // Clone again only if super.doProcess didn't already (i.e. when buildContent
+    // returned null). cloneContext is cheap and idempotent at this granularity.
+    result = this.cloneContext(result);
 
-    // Inject agent-management context (providers/plugins) before the first user message
-    if (formattedContent) {
-      const firstUserIndex = clonedContext.messages.findIndex((msg) => msg.role === 'user');
+    const mentionedContent = formatMentionedAgentsContext(this.config.context.mentionedAgents!);
 
-      if (firstUserIndex !== -1) {
-        const contextMessage = {
-          content: formattedContent,
-          createdAt: Date.now(),
-          id: `agent-management-context-${Date.now()}`,
-          meta: { injectType: 'agent-management-context', systemInjection: true },
-          role: 'user' as const,
-          updatedAt: Date.now(),
-        };
-
-        clonedContext.messages.splice(firstUserIndex, 0, contextMessage);
-        clonedContext.metadata.agentManagementContextInjected = true;
-        log('Agent Management context injected before first user message');
+    // Find the last user message index — but skip the synthetic systemInjection
+    // wrapper messages so we anchor to a real user turn.
+    let lastUserIndex = -1;
+    for (let i = result.messages.length - 1; i >= 0; i--) {
+      const msg = result.messages[i];
+      if (msg.role === 'user' && !msg.meta?.systemInjection) {
+        lastUserIndex = i;
+        break;
       }
     }
 
-    // Inject mentionedAgents delegation context AFTER the last user message
-    // This position makes the delegation instruction most salient to the model
-    if (hasMentionedAgents) {
-      const mentionedContent = formatMentionedAgentsContext(this.config.context.mentionedAgents!);
+    if (lastUserIndex !== -1) {
+      // NOTE: deliberately NOT tagging this with `systemInjection: true`.
+      // The delegation hint is a standalone instruction anchored after the
+      // last user message — it must NOT be picked up as the "consolidated
+      // system context" by subsequent BaseFirstUserContentProvider injectors
+      // (which would mistakenly append identity / memory / etc. into the
+      // delegation block).
+      const mentionMessage = {
+        content: mentionedContent,
+        createdAt: Date.now(),
+        id: `agent-mention-delegation-${Date.now()}`,
+        meta: { injectType: 'agent-mention-delegation' },
+        role: 'user' as const,
+        updatedAt: Date.now(),
+      };
 
-      // Find the last user message index
-      let lastUserIndex = -1;
-      for (let i = clonedContext.messages.length - 1; i >= 0; i--) {
-        if (clonedContext.messages[i].role === 'user') {
-          lastUserIndex = i;
-          break;
-        }
-      }
-
-      if (lastUserIndex !== -1) {
-        const mentionMessage = {
-          content: mentionedContent,
-          createdAt: Date.now(),
-          id: `agent-mention-delegation-${Date.now()}`,
-          meta: { injectType: 'agent-mention-delegation', systemInjection: true },
-          role: 'user' as const,
-          updatedAt: Date.now(),
-        };
-
-        // Insert after the last user message
-        clonedContext.messages.splice(lastUserIndex + 1, 0, mentionMessage);
-        log('Mentioned agents delegation context injected after last user message');
-      }
+      result.messages.splice(lastUserIndex + 1, 0, mentionMessage);
+      log('Mentioned agents delegation context injected after last user message');
     }
 
-    return this.markAsExecuted(clonedContext);
+    return result;
   }
 }

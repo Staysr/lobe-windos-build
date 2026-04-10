@@ -1,0 +1,1 @@
+import{D as a}from"./index-C275yc7e.js";import"./providerConfig-BNV0IvMA.js";const l={enableGatewayMode:e=>e.preference.lab?.enableGatewayMode??!1,enableInputMarkdown:e=>e.preference.lab?.enableInputMarkdown??a.lab.enableInputMarkdown};export{l};

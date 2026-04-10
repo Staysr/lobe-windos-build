@@ -1,0 +1,1 @@
+import{j as r}from"../vendor/vendor-motion-siEo8VfX.js";import{r as t}from"../vendor/vendor-emotion-B6qZrIr4.js";function p(a,e){const o=t.lazy(async()=>{const n=await a();return typeof n=="function"?{default:n}:"default"in n?n:{default:n}});return n=>r.jsx(t.Suspense,{fallback:e?.loading?.()??null,children:r.jsx(o,{...n})})}export{p as d};

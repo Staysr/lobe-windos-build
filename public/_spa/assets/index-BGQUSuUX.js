@@ -1,0 +1,1 @@
+import{j as c}from"../vendor/vendor-motion-siEo8VfX.js";import{r as t}from"../vendor/vendor-emotion-B6qZrIr4.js";import{bU as u}from"./index-C275yc7e.js";const l=t.memo(({enabled:o,onChange:e,size:r})=>{const[n,i]=t.useState(o),[m,s]=t.useState(!1);return c.jsx(u,{loading:m,size:r,value:n,onChange:async a=>{s(!0),i(a),await e(a),s(!1)}})});export{l as I};

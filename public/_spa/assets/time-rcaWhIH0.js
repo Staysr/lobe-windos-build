@@ -1,0 +1,1 @@
+import{ac as t}from"./index-C275yc7e.js";const e=()=>t().startOf("day"),o=s=>t().subtract(s,"month").startOf("month"),r=()=>o(1).endOf("month"),c=(s,a=14)=>t().diff(t(s),"day")<a;export{c as i,r as l,e as t};

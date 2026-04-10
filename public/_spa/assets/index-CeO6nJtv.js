@@ -1,0 +1,1 @@
+import{aR as a}from"./index-C275yc7e.js";import{r as o}from"../vendor/vendor-emotion-B6qZrIr4.js";import{u as c}from"./index-D_1YyGD-.js";function p(e,n){var r=a(o.useState(e),2),t=r[0],u=r[1],s=c(function(){u(e)},n).run;return o.useEffect(function(){s()},[e]),t}export{p as u};

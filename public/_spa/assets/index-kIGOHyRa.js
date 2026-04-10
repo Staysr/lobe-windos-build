@@ -1,0 +1,1 @@
+import{j as s}from"../vendor/vendor-motion-siEo8VfX.js";import{I as e,o}from"./index-C275yc7e.js";import{r as m}from"../vendor/vendor-emotion-B6qZrIr4.js";import{$ as t}from"../vendor/vendor-icons-CwKawJ1k.js";const l=m.memo(({size:r=20})=>s.jsx(e,{color:o.geekblue,fill:o.geekblue3,icon:t,size:r}));export{l as L};

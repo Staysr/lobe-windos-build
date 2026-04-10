@@ -1,0 +1,1 @@
+import{j as e}from"../vendor/vendor-motion-siEo8VfX.js";import{E as t}from"./EmojiPicker-CU-SneYA.js";import{u as s,af as m}from"./index-C275yc7e.js";import{r as l}from"../vendor/vendor-emotion-B6qZrIr4.js";const p=l.memo(({shape:r="square",...o})=>{const a=s(m.currentLanguage);return e.jsx(t,{shape:r,...o,defaultAvatar:null,locale:a})});export{p as E};

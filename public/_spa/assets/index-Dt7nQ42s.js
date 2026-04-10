@@ -1,0 +1,1 @@
+import{r as n}from"../vendor/vendor-emotion-B6qZrIr4.js";function e(r){var t=n.useRef(r);return t.current=r,t}var f=function(r){var t=e(r);n.useEffect(function(){return function(){t.current()}},[])};export{f as a,e as u};

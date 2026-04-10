@@ -1,1 +1,0 @@
-import{r as t}from"../vendor/vendor-emotion-D2wYcXAj.js";const i=(e,r)=>{const o=t.useRef(r);t.useLayoutEffect(()=>{o.current=r},[r]),t.useEffect(()=>{if(!window.electron)return;const c=(s,n)=>{o.current(n)};return window.electron.ipcRenderer.on(e,c),()=>{window.electron.ipcRenderer.removeListener(e,c)}},[e])};export{i as u};

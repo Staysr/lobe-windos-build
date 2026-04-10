@@ -1,0 +1,1 @@
+import{ao as u}from"./index-C275yc7e.js";import{r as e}from"../vendor/vendor-emotion-B6qZrIr4.js";const p=t=>{const{t:r,locale:a}=u();return{locale:a,t:e.useMemo(()=>t?o=>{const n=r(o),s=t[o];return n===o&&s?s:n}:r,[r,t])}};export{p as u};

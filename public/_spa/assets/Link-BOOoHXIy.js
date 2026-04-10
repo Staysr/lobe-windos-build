@@ -1,0 +1,1 @@
+import{j as m}from"../vendor/vendor-motion-siEo8VfX.js";import{r as i}from"../vendor/vendor-emotion-B6qZrIr4.js";import{L as n}from"./index-C275yc7e.js";const a=i.memo(({href:o,to:r,...t})=>{const s=o||r||"/";return m.jsx(n,{...t,to:s})});a.displayName="Link";export{a as L};
